@@ -1,0 +1,63 @@
+version: '2'
+
+services:
+  suricata:
+    depends_on:
+      - fluentd
+    build: suricata
+    container_name: suricata
+    restart: always
+    environment:
+    # For ET Pro ruleset replace "OPEN" with your OINKCODE
+     - OINKCODE=OPEN
+    network_mode: "host"
+    cap_add:
+     - NET_ADMIN
+     - SYS_NICE
+     - NET_RAW
+    image: "dtagdevsec/suricata:1903"
+    volumes:
+      - /var/log/suricata:/var/log/suricata
+      - ./suricata/rules/suricata.rules:/var/lib/suricata/rules/suricata.rules
+      - ./suricata/dist/suricata.yaml:/etc/suricata/suricata.yaml
+
+  elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:6.3.1
+        container_name: elasticsearch
+        environment:
+            - cluster.name=docker-cluster
+            - bootstrap.memory_lock=true
+            - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+            - "http.cors.enabled:true"
+            - "http.cors.allow-origin:\"*\""
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+        ports:
+            - 9200:9200
+        networks:
+            - elk
+        restart: always
+
+  fluentd:
+    depends_on:
+      - elasticsearch
+    image: beeeeemo/fluentd_aggregator:last
+    container_name: fluentd
+    build:
+      context: "$PWD/fluentd_image/."
+      dockerfile: "$PWD/fluentd_image/Dockerfile"
+    volumes:
+      - "/var/log/auth.log:/var/log/auth.log"
+      - "${PWD}/fluentd/conf:/fluentd/etc"
+      - "${PWD}/fluentd/dictionary:/fluentd/dictionary"
+      - "/etc/localtime:/etc/localtime:ro"
+      - "/home/test/Firewall_CEF.log:/var/log/Firewall_CEF.log"
+      - "/var/log/suricata:/fluentd/log"
+    networks:
+      - elk
+    restart: always
+
+networks:
+  elk:
